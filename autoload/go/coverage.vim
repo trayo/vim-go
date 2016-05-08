@@ -30,8 +30,18 @@ function! go#coverage#Buffer(bang, ...)
 
     let s:toggle = 1
     let l:tmpname = tempname()
-    let args = [a:bang, 0, "-coverprofile", l:tmpname]
 
+    if has('job')
+        call go#util#EchoProgress("checking coverage ...")
+        " let s:coverage_handler_jobs[id] = l:tmpname
+        call go#job#Spawn(a:bang, {
+                    \ 'cmd': ['go', 'test', '-coverprofile', l:tmpname],
+                    \ 'callback': function('s:coverage_callback', [l:tmpname]),
+                    \ })
+        return
+    endif
+
+    let args = [a:bang, 0, "-coverprofile", l:tmpname]
     if a:0
         call extend(args, a:000)
     endif
@@ -87,12 +97,14 @@ function! go#coverage#Browser(bang, ...)
     if a:0
         call extend(args, a:000)
     endif
+
     let id = call('go#cmd#Test', args)
     if has('nvim')
         call go#jobcontrol#AddHandler(function('s:coverage_browser_handler'))
         let s:coverage_browser_handler_jobs[id] = l:tmpname
         return
     endif
+
     if go#util#ShellError() == 0
         let openHTML = 'go tool cover -html='.l:tmpname
         call go#tool#ExecuteInDir(openHTML)
@@ -233,6 +245,19 @@ function! go#coverage#overlay(file)
     endfor
 endfunction
 
+
+" ---------------------
+" | Vim job callbacks |
+" ---------------------
+
+" coverage_callback is called when the coverage execution is finished
+function! s:coverage_callback(coverfile, job, exit_status, data)
+    if a:exit_status == 0
+        call go#coverage#overlay(a:coverfile)
+    endif
+
+    call delete(a:coverfile)
+endfunction
 
 " -----------------------
 " | Neovim job handlers |
